@@ -15,20 +15,22 @@ typedef struct {
 
 typedef struct { 
     long mtype;
-    char mtext[1024]; 
+    int title_index; 
 } Message;
 
-int kuld( int uzenetsor ) 
+int send_message(int message_q, int index) 
 { 
-    const Message uz = { 5, "Hajra Fradi!" }; 
-    msgsnd( uzenetsor, &uz, strlen ( uz.mtext ) + 1 , 0 ); 
+    const Message message = { 5, index }; 
+    msgsnd( message_q, &message, sizeof(int) , 0 ); 
 } 
      
-void fogad( int uzenetsor ) 
+void receive_message( int message_q ) 
 { 
-    Message uz; 
-    msgrcv(uzenetsor, &uz, 1024, 5, 0 ); 
-    printf( "A kapott uzenet kodja: %ld, szovege:  %s\n", uz.mtype, uz.mtext ); 
+    Message message; 
+    msgrcv(message_q, &message, sizeof(int), 5, 0 );
+    
+    printf("Parent received the selected poem\n");
+    
 } 
 
 int get_number_of_poems(FILE* file)
@@ -122,6 +124,28 @@ void print_poem_titles(FILE* file)
         }
         ++line_index;
     }
+}
+
+void print_menu(FILE* file) {
+    printf("\n------------ Menu ------------\n");
+    printf("Here are your poems:\n");
+    print_poem_titles(file);
+    printf("\n");
+    printf("(1) Read poem\n");
+    printf("(2) Write new poem\n");
+    printf("(3) Edit poem\n");
+    printf("(4) Delete poem\n");
+    printf("(5) Send child\n");
+    printf("(6) Exit menu\n");
+    printf("\n");
+    printf("Enter option: ");
+}
+
+void get_poem_from_index(char* poem, int title_index, FILE* file)
+{
+    char title[MAX_STR_LENGTH];
+    get_title_from_index(title, title_index, file);
+    get_poem_from_title(poem, title, file);
 }
 
 void get_poems_from_indexes(char* poem1, char* poem2, int title1_index, int title2_index, FILE* file)

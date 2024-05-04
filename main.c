@@ -15,7 +15,10 @@ void read_poem(FILE* file, char* title) {
     rewind(file);
 
     char line[MAX_STR_LENGTH];
-    while (fgets(line, sizeof(line), file) && strcmp(line, title) != 0) {}
+    while (fgets(line, sizeof(line), file) && strcmp(line, title) != 0)
+    {
+        
+    }
     fgets(line, sizeof(line), file);
     printf("Here goes your poem:\n%s", line);
 }
@@ -102,7 +105,17 @@ void child_reached_destination_handler(int signumber)
     printf("Parent starts sending poems\n");
 }
 
-void start_child_listening(int* pipefd, FILE* file, int uzenetsor)
+int get_random_from_two_titles(int title1, int title2)
+{
+    int random_num = get_random_number(2);
+    if (random_num == 0)
+    {
+        return title1;
+    }
+    return title2;
+}
+
+void start_child_listening(int* pipefd, FILE* file, int message_q)
 {
     while (1)
     {
@@ -119,10 +132,18 @@ void start_child_listening(int* pipefd, FILE* file, int uzenetsor)
         char poem1[MAX_STR_LENGTH];
         char poem2[MAX_STR_LENGTH];
         get_poems_from_indexes(poem1, poem2, received_pair.title1_index, received_pair.title2_index, file);
-        printf("Here goes the first poem:\n%s", poem1);
-        printf("Here goes the second poem:\n%s", poem2);
+        printf("\nHere goes the first poem:\n%s", poem1);
+        printf("Here goes the second poem:\n%s\n", poem2);
 
-        kuld(uzenetsor);
+        int random_title = get_random_from_two_titles(received_pair.title1_index, received_pair.title2_index);
+        char title_selected[MAX_STR_LENGTH];
+        get_title_from_index(title_selected, random_title, file);
+        printf("I selected the poem, called %s.", title_selected);
+
+        char poem_selected[MAX_STR_LENGTH];
+        get_poem_from_index(poem_selected, random_title, file);        
+        
+        send_message(message_q, random_title);
     }
 }
 
@@ -138,7 +159,7 @@ void init_pipes(int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE])
     }
 }
 
-void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], FILE* file, int uzenetsor)
+void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], FILE* file, int message_q)
 {
     for (int i = 0; i < NUMBER_OF_CHILDREN; ++i)
     {
@@ -151,14 +172,14 @@ void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDRE
 
         if (id == 0)
         {
-            start_child_listening(pipes[i], file, uzenetsor);
+            start_child_listening(pipes[i], file, message_q);
             exit(EXIT_SUCCESS);
         }
         children[i] = id;
     }
 }
 
-void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int uzenetsor)
+void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int message_q)
 {
     int number_of_poems = get_number_of_poems(file);
     if (number_of_poems < 2)
@@ -180,7 +201,7 @@ void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int
     write(pipes[random_id][1], &message_length, sizeof(int));
     write(pipes[random_id][1], &pair, message_length);
 
-    fogad(uzenetsor);
+    receive_message(message_q);
 }
 
     
@@ -199,15 +220,54 @@ void kill_children(pid_t children[NUMBER_OF_CHILDREN])
     }
 }
 
+void get_title_from_user(char* title)
+{
+    printf("Enter the title of the poem: ");
+    fgets(title, MAX_STR_LENGTH, stdin);
+}
+
+void process_input(FILE** file, int answer, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int message_q)
+{
+    char title[MAX_STR_LENGTH];
+
+    switch (answer) {
+        case READ:
+            get_title_from_user(title);
+            read_poem(*file, title);
+            break;
+        case WRITE:
+            get_title_from_user(title);
+            write_poem(*file, title);
+            break;
+        case EDIT:
+            get_title_from_user(title);
+            edit_poem(file, title);
+            break;
+        case SEND_CHILD:
+            tell_children_to_travel(*file, children, pipes, message_q);
+            break;
+        case DELETE:
+            get_title_from_user(title);
+            delete_poem(file, title);
+            break;
+    }
+}
+
+void read_answer(int* answer) {
+    scanf("%d", answer);
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
 int main(int argc, char* argv[])
 {
     FILE* file;
     file = fopen(FILE_NAME, "r+");
 
-    int uzenetsor, status; 
+    int message_q, status; 
     key_t kulcs; 
     kulcs = ftok(argv[0], 1); 
-    uzenetsor = msgget(kulcs, 0600 | IPC_CREAT); 
+    message_q = msgget(kulcs, 0600 | IPC_CREAT); 
 
     signal(SIGTERM, child_started_journey_handler);
     signal(SIGUSR2, child_reached_destination_handler);
@@ -215,9 +275,15 @@ int main(int argc, char* argv[])
     int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE];
     pid_t children[NUMBER_OF_CHILDREN];
     init_pipes(pipes);
-    init_children(children, pipes, file, uzenetsor);
+    init_children(children, pipes, file, message_q);
 
-    tell_children_to_travel(file, children, pipes, uzenetsor);
+    int answer;
+    while (answer != QUIT) {
+        print_menu(file);
+        read_answer(&answer);
+        process_input(&file, answer, children, pipes, message_q);
+    }
+    
     kill_children(children);
 
     fclose(file);
