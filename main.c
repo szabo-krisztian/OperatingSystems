@@ -102,12 +102,7 @@ void child_reached_destination_handler(int signumber)
     printf("Parent starts sending poems\n");
 }
 
-typedef struct {
-    int title1_index;
-    int title2_index;
-} TitlePair;
-
-void start_child_listening(int* pipefd, FILE* file)
+void start_child_listening(int* pipefd, FILE* file, int uzenetsor)
 {
     while (1)
     {
@@ -124,8 +119,10 @@ void start_child_listening(int* pipefd, FILE* file)
         char poem1[MAX_STR_LENGTH];
         char poem2[MAX_STR_LENGTH];
         get_poems_from_indexes(poem1, poem2, received_pair.title1_index, received_pair.title2_index, file);
-        printf("here goes poem1:\n%s", poem1);
-        printf("here goes poem2:\n%s", poem2);
+        printf("Here goes the first poem:\n%s", poem1);
+        printf("Here goes the second poem:\n%s", poem2);
+
+        kuld(uzenetsor);
     }
 }
 
@@ -141,7 +138,7 @@ void init_pipes(int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE])
     }
 }
 
-void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], FILE* file)
+void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], FILE* file, int uzenetsor)
 {
     for (int i = 0; i < NUMBER_OF_CHILDREN; ++i)
     {
@@ -154,15 +151,21 @@ void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDRE
 
         if (id == 0)
         {
-            start_child_listening(pipes[i], file);
+            start_child_listening(pipes[i], file, uzenetsor);
             exit(EXIT_SUCCESS);
         }
         children[i] = id;
     }
 }
 
-void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE])
+void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int uzenetsor)
 {
+    int number_of_poems = get_number_of_poems(file);
+    if (number_of_poems < 2)
+    {
+        return;
+    }
+
     int random_id = get_random_number(NUMBER_OF_CHILDREN);
     sleep(1);
     kill(children[random_id], SIGTERM);
@@ -176,6 +179,8 @@ void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int
     
     write(pipes[random_id][1], &message_length, sizeof(int));
     write(pipes[random_id][1], &pair, message_length);
+
+    fogad(uzenetsor);
 }
 
     
@@ -194,20 +199,25 @@ void kill_children(pid_t children[NUMBER_OF_CHILDREN])
     }
 }
 
-int main()
+int main(int argc, char* argv[])
 {
     FILE* file;
     file = fopen(FILE_NAME, "r+");
-    
+
+    int uzenetsor, status; 
+    key_t kulcs; 
+    kulcs = ftok(argv[0], 1); 
+    uzenetsor = msgget(kulcs, 0600 | IPC_CREAT); 
+
     signal(SIGTERM, child_started_journey_handler);
     signal(SIGUSR2, child_reached_destination_handler);
 
     int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE];
     pid_t children[NUMBER_OF_CHILDREN];
     init_pipes(pipes);
-    init_children(children, pipes, file);
+    init_children(children, pipes, file, uzenetsor);
 
-    tell_children_to_travel(file, children, pipes);
+    tell_children_to_travel(file, children, pipes, uzenetsor);
     kill_children(children);
 
     fclose(file);

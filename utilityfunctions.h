@@ -2,8 +2,34 @@
 #define UTILITY_FUNCTIONS_H
 
 #include <time.h>
+#include <sys/ipc.h> 
+#include <sys/msg.h> 
+#include <sys/types.h>
 
 const int MAX_STR_LENGTH = 512;
+
+typedef struct {
+    int title1_index;
+    int title2_index;
+} TitlePair;
+
+typedef struct { 
+    long mtype;
+    char mtext[1024]; 
+} Message;
+
+int kuld( int uzenetsor ) 
+{ 
+    const Message uz = { 5, "Hajra Fradi!" }; 
+    msgsnd( uzenetsor, &uz, strlen ( uz.mtext ) + 1 , 0 ); 
+} 
+     
+void fogad( int uzenetsor ) 
+{ 
+    Message uz; 
+    msgrcv(uzenetsor, &uz, 1024, 5, 0 ); 
+    printf( "A kapott uzenet kodja: %ld, szovege:  %s\n", uz.mtype, uz.mtext ); 
+} 
 
 int get_number_of_poems(FILE* file)
 {
