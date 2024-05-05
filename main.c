@@ -95,8 +95,6 @@ void delete_poem(FILE** file, char* title) {
     *file = fopen(FILE_NAME, "r+");
 }
 
-int random_id;
-
 void child_started_journey_handler(int signumber)
 {
     
@@ -134,7 +132,7 @@ void receive_message( int message_q, FILE** file)
     get_title_from_index(title, message.pair.title_index, *file);
 
     printf("Parent received the selected poem, called %s\n", title);
-    //delete_poem(file, title);
+    delete_poem(file, title);
 }
 
 void start_child_listening(int* pipefd, FILE* file, int message_q)
@@ -142,7 +140,7 @@ void start_child_listening(int* pipefd, FILE* file, int message_q)
     while (1)
     {
         pause();
-        printf("The %d. child reached his desination.\n", random_id + 1);
+        printf("The %d. child reached his desination.\n", get_random_number(NUMBER_OF_CHILDREN) + 1);
 
         sleep(1);
         kill(getppid(), SIGUSR2);
@@ -155,7 +153,6 @@ void start_child_listening(int* pipefd, FILE* file, int message_q)
         
         char title1[MAX_STR_LENGTH];
         char title2[MAX_STR_LENGTH];
-        
         get_title_from_index(title1, received_pair.title1_index, file);
         get_title_from_index(title2, received_pair.title2_index, file);
 
@@ -169,7 +166,7 @@ void start_child_listening(int* pipefd, FILE* file, int message_q)
         printf("%s", poem1);
         printf("The second one is called: %s\t", title2);
         printf("%s\n", poem2);
-
+        
         int random_title = get_random_from_two_titles(received_pair.title1_index, received_pair.title2_index);
         char title_selected[MAX_STR_LENGTH];
         get_title_from_index(title_selected, random_title, file);
@@ -227,7 +224,7 @@ void tell_children_to_travel(FILE** file, pid_t children[NUMBER_OF_CHILDREN], in
         return;
     }
 
-    get_random_number(NUMBER_OF_CHILDREN);
+    int random_id = get_random_number(NUMBER_OF_CHILDREN);
     sleep(3);
     kill(children[random_id], SIGTERM);
     pause();
@@ -235,7 +232,7 @@ void tell_children_to_travel(FILE** file, pid_t children[NUMBER_OF_CHILDREN], in
 
     int title_indexes[2];
     get_two_random_title_index(title_indexes, *file);
-
+    
     TitlePair pair = {title_indexes[0], title_indexes[1]};
     int message_length = sizeof(pair);
     
@@ -305,8 +302,7 @@ void read_answer(int* answer) {
 
 int main(int argc, char* argv[])
 {
-    FILE* file;
-    file = fopen(FILE_NAME, "r+");
+    
 
     int message_q, status; 
     key_t kulcs; 
@@ -319,17 +315,20 @@ int main(int argc, char* argv[])
     int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE];
     pid_t children[NUMBER_OF_CHILDREN];
     init_pipes(pipes);
-    init_children(children, pipes, file, message_q);
 
     int answer;
     while (answer != QUIT) {
+        FILE* file;
+        file = fopen(FILE_NAME, "r+");
+        init_children(children, pipes, file, message_q);
+
         print_menu(file);
         read_answer(&answer);
         process_input(&file, answer, children, pipes, message_q);
+
+        kill_children(children);
+        fclose(file);
     }
     
-    kill_children(children);
-
-    fclose(file);
     return 0;
 }
