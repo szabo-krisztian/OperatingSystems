@@ -79,7 +79,7 @@ void delete_poem(FILE** file, char* title) {
     char line[MAX_STR_LENGTH];
     int line_index = 0;
     while (fgets(line, sizeof(line), *file)) {
-        if (strcmp(line, title)) {
+        if (strcmp(line, title) == 0) {
             skip_lines_in_file(*file, 1);
         } else {
             fputs(line, temp_file);
@@ -95,14 +95,16 @@ void delete_poem(FILE** file, char* title) {
     *file = fopen(FILE_NAME, "r+");
 }
 
+int random_id;
+
 void child_started_journey_handler(int signumber)
 {
-    printf("Child named %d reached his desination.\n", getpid());
+    
 }
 
 void child_reached_destination_handler(int signumber)
 {
-    printf("Parent starts sending poems\n");
+
 }
 
 int get_random_from_two_titles(int title1, int title2)
@@ -115,11 +117,33 @@ int get_random_from_two_titles(int title1, int title2)
     return title2;
 }
 
+int send_message(int message_q, int title_index, FILE* file) 
+{ 
+    TitleFilePair pair = { title_index, file };
+    const Message message = { 5, pair }; 
+
+    msgsnd( message_q, &message, sizeof(TitleFilePair) , 0 ); 
+} 
+     
+void receive_message( int message_q, FILE** file) 
+{ 
+    Message message; 
+    msgrcv(message_q, &message, sizeof(TitleFilePair), 5, 0 );
+    
+    char title[MAX_STR_LENGTH];
+    get_title_from_index(title, message.pair.title_index, *file);
+
+    printf("Parent received the selected poem, called %s\n", title);
+    //delete_poem(file, title);
+}
+
 void start_child_listening(int* pipefd, FILE* file, int message_q)
 {
     while (1)
     {
         pause();
+        printf("The %d. child reached his desination.\n", random_id + 1);
+
         sleep(1);
         kill(getppid(), SIGUSR2);
 
@@ -129,21 +153,36 @@ void start_child_listening(int* pipefd, FILE* file, int message_q)
         read(pipefd[0], &message_length, sizeof(int));
         read(pipefd[0], &received_pair, message_length);
         
+        char title1[MAX_STR_LENGTH];
+        char title2[MAX_STR_LENGTH];
+        
+        get_title_from_index(title1, received_pair.title1_index, file);
+        get_title_from_index(title2, received_pair.title2_index, file);
+
         char poem1[MAX_STR_LENGTH];
         char poem2[MAX_STR_LENGTH];
-        get_poems_from_indexes(poem1, poem2, received_pair.title1_index, received_pair.title2_index, file);
-        printf("\nHere goes the first poem:\n%s", poem1);
-        printf("Here goes the second poem:\n%s\n", poem2);
+        
+        get_poem_from_title(poem1, title1, file);
+        get_poem_from_title(poem2, title2, file);
+        
+        printf("\nThe first one is called: %s\t", title1);
+        printf("%s", poem1);
+        printf("The second one is called: %s\t", title2);
+        printf("%s\n", poem2);
 
         int random_title = get_random_from_two_titles(received_pair.title1_index, received_pair.title2_index);
         char title_selected[MAX_STR_LENGTH];
         get_title_from_index(title_selected, random_title, file);
-        printf("I selected the poem, called %s.", title_selected);
+        printf("I selected the poem, called %s", title_selected);
 
         char poem_selected[MAX_STR_LENGTH];
         get_poem_from_index(poem_selected, random_title, file);        
         
-        send_message(message_q, random_title);
+        send_message(message_q, random_title, file);
+        pause();
+        printf("%sIs it okay to sprinkle?\n", poem_selected);
+        sleep(1);
+        kill(getppid(), SIGUSR2);
     }
 }
 
@@ -179,21 +218,23 @@ void init_children(int children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDRE
     }
 }
 
-void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int message_q)
+void tell_children_to_travel(FILE** file, pid_t children[NUMBER_OF_CHILDREN], int pipes[NUMBER_OF_CHILDREN][PIPE_READ_WRITE], int message_q)
 {
-    int number_of_poems = get_number_of_poems(file);
+    int number_of_poems = get_number_of_poems(*file);
     if (number_of_poems < 2)
     {
+        printf("Not enough poems.\n");
         return;
     }
 
-    int random_id = get_random_number(NUMBER_OF_CHILDREN);
-    sleep(1);
+    get_random_number(NUMBER_OF_CHILDREN);
+    sleep(3);
     kill(children[random_id], SIGTERM);
     pause();
+    printf("Parent starts sending poems.\n");
 
     int title_indexes[2];
-    get_two_random_title_index(title_indexes, file);
+    get_two_random_title_index(title_indexes, *file);
 
     TitlePair pair = {title_indexes[0], title_indexes[1]};
     int message_length = sizeof(pair);
@@ -201,7 +242,10 @@ void tell_children_to_travel(FILE* file, pid_t children[NUMBER_OF_CHILDREN], int
     write(pipes[random_id][1], &message_length, sizeof(int));
     write(pipes[random_id][1], &pair, message_length);
 
-    receive_message(message_q);
+    receive_message(message_q, file);
+    sleep(1);
+    kill(children[random_id], SIGTERM);
+    pause();
 }
 
     
@@ -244,7 +288,7 @@ void process_input(FILE** file, int answer, pid_t children[NUMBER_OF_CHILDREN], 
             edit_poem(file, title);
             break;
         case SEND_CHILD:
-            tell_children_to_travel(*file, children, pipes, message_q);
+            tell_children_to_travel(file, children, pipes, message_q);
             break;
         case DELETE:
             get_title_from_user(title);

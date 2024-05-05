@@ -13,25 +13,16 @@ typedef struct {
     int title2_index;
 } TitlePair;
 
+typedef struct
+{
+    int title_index;
+    FILE* file;
+} TitleFilePair;
+
 typedef struct { 
     long mtype;
-    int title_index; 
+    TitleFilePair pair;
 } Message;
-
-int send_message(int message_q, int index) 
-{ 
-    const Message message = { 5, index }; 
-    msgsnd( message_q, &message, sizeof(int) , 0 ); 
-} 
-     
-void receive_message( int message_q ) 
-{ 
-    Message message; 
-    msgrcv(message_q, &message, sizeof(int), 5, 0 );
-    
-    printf("Parent received the selected poem\n");
-    
-} 
 
 int get_number_of_poems(FILE* file)
 {
@@ -157,5 +148,7 @@ void get_poems_from_indexes(char* poem1, char* poem2, int title1_index, int titl
     get_poem_from_title(poem1, title1, file);
     get_poem_from_title(poem2, title2, file);
 }
+
+
 
 #endif /* UTILITY_FUNCTIONS_H */
